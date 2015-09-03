@@ -333,8 +333,8 @@ namespace OptionPricing
 
         public override double GetNextPrice(StochasticAssetPrice S, double dt, params double[] Z)
         {
-            double nextPrice = S.CurrentPrice * Math.Exp((S.Mu - 0.5 * S.Sigma * S.Sigma) * dt
-                + S.Sigma * Z[0] * Math.Sqrt(dt));
+            double nextPrice = S.CurrentPrice +S.Mu*S.CurrentPrice*dt
+                +S.Sigma*S.CurrentPrice*Z[0] * Math.Sqrt(dt);
             S.CurrentPrice = nextPrice;
             return nextPrice;
         }

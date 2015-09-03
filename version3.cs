@@ -508,7 +508,7 @@ namespace OptionPricing
             else
             {
                 Form1 s2form = new Form1("MC Simulation without Antithetic Variance Reduction");
-                double[] s2 = Option.PricingByMCSim(Asset, Euler, numOfScenarios, timeSteps, true,
+                double[] s2 = Option.PricingByMCSim(Asset, Euler, numOfScenarios, timeSteps, false,
                     visualizationFlag, s2form);
                 Console.WriteLine("Option price estimated by Monte Carlo Simulation is:\n {0:#0.00} \n" +
                     "Standard error is:\n {1:#0.000} ", s2[0], s2[1]);

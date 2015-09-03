@@ -130,7 +130,7 @@ namespace OptionPricing
         }
 
         /// <summary>
-        /// This method gives the estimated the option value 
+        /// This method gives the estimated option value 
         /// and the estimation standard error using MC simulation
         /// </summary>
         /// <param name="S"> describes the Brownian motion rule of the underlying asset</param>

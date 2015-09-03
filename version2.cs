@@ -338,7 +338,7 @@ namespace OptionPricing
         {
             double[] Result = new double[2];                     //record the approximated price and standard error
             double[] Sample = new double[numOfScenarios];        //record value at maturity for each scenario
-            double sumValue = 0.0;                               //record cumulated sum of Sample array
+            double sumValue = 0.0;                               //record cumulative sum of Sample array
             GaussianGenerator nrand = new GaussianGenerator();
             if (antitheticFlag)
             {

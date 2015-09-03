@@ -238,7 +238,7 @@ namespace OptionPricing
         /// random variates named by 'antithetic' which can help reduce the variance 
         /// of MC simulation
         /// </summary>
-        /// <returns>an double type 2*N array which records the asset price at each point
+        /// <returns>a double type 2*N array which records the asset price at each point
         /// for the two paths
         /// </returns>
 

@@ -337,8 +337,8 @@ namespace OptionPricing
 
         public override double GetNextPrice(StochasticAssetPrice S, double dt, params double[] Z)
         {
-            double nextPrice = S.CurrentPrice +S.Mu*S.CurrentPrice*dt
-                +S.Sigma*S.CurrentPrice*Z[0] * Math.Sqrt(dt);
+            double nextPrice = S.CurrentPrice + S.Mu * S.CurrentPrice * dt
+                + S.Sigma * S.CurrentPrice * Z[0] * Math.Sqrt(dt);
             S.CurrentPrice = nextPrice;
             return nextPrice;
         }
@@ -356,7 +356,7 @@ namespace OptionPricing
         {
             double nextPrice = S.CurrentPrice + S.Mu * S.CurrentPrice * dt
                 + S.Sigma * S.CurrentPrice * Z[0] * Math.Sqrt(dt)
-                +0.5*Math.Pow(S.Sigma,2.0)*dt*(Math.Pow(Z[0],2.0)-1);
+                + 0.5 * Math.Pow(S.Sigma, 2.0) * dt * (Math.Pow(Z[0], 2.0) - 1);
             S.CurrentPrice = nextPrice;
             return nextPrice;
         }
@@ -374,7 +374,7 @@ namespace OptionPricing
 
         public override double GetNextPrice(StochasticAssetPrice S, double dt, params double[] Z)
         {
-            double nextPrice = S.CurrentPrice * Math.Exp((S.Mu - 0.5 * Math.Pow(S.Sigma,2.0)) * dt
+            double nextPrice = S.CurrentPrice * Math.Exp((S.Mu - 0.5 * Math.Pow(S.Sigma, 2.0)) * dt
                 + S.Sigma * Z[0] * Math.Sqrt(dt));
             S.CurrentPrice = nextPrice;
             return nextPrice;
@@ -504,7 +504,7 @@ namespace OptionPricing
             //input needed information from keyboard
             Console.WriteLine("Input spot price of underlying asset:");
             double spotPrice = Convert.ToDouble(Console.ReadLine());
-            while (spotPrice<0)
+            while (spotPrice < 0)
             {
                 Console.WriteLine("price must be positive, re-enter valide price:");
                 spotPrice = Convert.ToDouble(Console.ReadLine());
@@ -564,39 +564,31 @@ namespace OptionPricing
             EuropeanOption Option = new EuropeanOption(timeToMaturity, strikePrice, optionType);
             IDiscretizationScheme scheme;
             if (discretizationScheme == 0)
-            { scheme = (IDiscretizationScheme)(new EulerSchemeForBSModel()); } 
-            else if (discretizationScheme==1)
+            { scheme = (IDiscretizationScheme)(new EulerSchemeForBSModel()); }
+            else if (discretizationScheme == 1)
             { scheme = (IDiscretizationScheme)(new MilsteinSchemeForBSModel()); }
             else
-            {scheme= (IDiscretizationScheme)(new LogPriceSchemeForBSModel()); }              
+            { scheme = (IDiscretizationScheme)(new LogPriceSchemeForBSModel()); }
             StochasticAssetPrice Asset = new StochasticAssetPrice(Mu, sigma, spotPrice);
 
+            Form1 s1form = new Form1("MC Simulation with Antithetic Variance Reduction");
+            double[] s1 = Option.PricingByMCSim(Asset, scheme, numOfScenarios, timeSteps,
+                antithetic, visualizationFlag, s1form);
             if (antithetic)
             {
-                Form1 s1form = new Form1("MC Simulation with Antithetic Variance Reduction");
-                double[] s1 = Option.PricingByMCSim(Asset, scheme, numOfScenarios, timeSteps,
-                    true, visualizationFlag, s1form);
                 Console.WriteLine("Option price estimated by Monte Carlo Simulation and " +
                     "antithetic variance reduction is:\n {0:#0.00} \n Standard error is:\n {1:#0.000} ",
                     s1[0], s1[1]);
-                if (visualizationFlag)
-                {
-                    // display the graph
-                    Application.Run(s1form.Display());
-                }
             }
             else
             {
-                Form1 s2form = new Form1("MC Simulation without Antithetic Variance Reduction");
-                double[] s2 = Option.PricingByMCSim(Asset, scheme, numOfScenarios, timeSteps, false,
-                    visualizationFlag, s2form);
                 Console.WriteLine("Option price estimated by Monte Carlo Simulation is:\n {0:#0.00} \n" +
-                    "Standard error is:\n {1:#0.000} ", s2[0], s2[1]);
-                if (visualizationFlag)
-                {
-                    // display the graph
-                    Application.Run(s2form.Display());
-                }
+                    "Standard error is:\n {1:#0.000} ", s1[0], s1[1]);
+            }
+            if (visualizationFlag)
+            {
+                // display the graph
+                Application.Run(s1form.Display());
             }
             Console.ReadLine();
         }

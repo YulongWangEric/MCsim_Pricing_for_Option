@@ -1,0 +1,604 @@
+/**
+ * This package implements a Project using MC simulation to price European Call/Put Options 
+ * under different Discretization Scheme for Black-Scholes Model:
+ * 1. Euler Discretization Scheme
+ * 2. Milstein Discretization Scheme
+ * 3. Discretization Scheme based on log price (Euler Scheme and Milstein Scheme 
+ *    are identical for log price)
+ * 
+ * @author Yulong Wang
+ * @version 03/09/15
+ */
+
+/**
+* Package ZedGraph is required for data visualization
+* references to the following frameworks also need to be added:
+* System.Windows.Forms; System.Drawing 
+*/
+
+using System;
+using System.Drawing;
+using System.Windows.Forms;
+using ZedGraph;
+
+namespace OptionPricing
+{
+    public enum OptionType { Call, Put };
+
+    ///   <summary> 
+    ///   This class generates Gaussian distributed pseudo-random variates 
+    ///   </summary> 
+
+    public class GaussianGenerator
+    {
+        private Random rand;
+
+        public void SetSeed(int seed)
+        {
+            rand = new Random(seed);
+        }
+
+        ///   <summary> 
+        ///   this method uses two U(0,1) distributed random variates 
+        /// to produce a Gaussian distributed random variate
+        ///   </summary> 
+
+        public double NextGaussian()
+        {
+            double u1 = rand.NextDouble();
+            double u2 = rand.NextDouble();
+            double u = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+            return u;
+        }
+
+        ///   <summary> 
+        ///   constructor with no parameter. A random integer generated 
+        /// by system time is employed as the seed for rand
+        ///   </summary> 
+
+        public GaussianGenerator()
+        {
+            int seed = (new Random()).Next();
+            rand = new Random(seed);
+        }
+
+        /// <summary>
+        /// overloading constructor given an integer parameter
+        /// </summary>
+        /// <param name="seed"> is used to set the seed for<member>rand</member></param>
+
+        public GaussianGenerator(int seed)
+        {
+            rand = new Random(seed);
+        }
+    }
+
+
+    ///   <summary> 
+    ///   This is an abstract class for the object of plain vanilla option 
+    ///   </summary> 
+
+    public abstract class PlainVanillaOption
+    {
+        /// <summary>
+        /// <member>t is the time to maturity for this option</member>
+        /// <member>strikePrice is the strike price for this option</member>
+        /// <member>underlyingAssetName is the name for underlying asset</member>
+        /// <member>oType defines whether it is a call or put option</member>
+        /// </summary>
+
+        protected double t;
+        protected double strikePrice;
+        protected string underlyingAssetName;
+        protected OptionType oType;
+
+        public double T
+        {
+            get { return t; }
+            set { t = value; }
+        }
+
+        public double StrikePrice
+        {
+            get { return strikePrice; }
+            set { strikePrice = value; }
+        }
+
+        public string UnderlyingAssetName
+        {
+            get { return underlyingAssetName != null ? underlyingAssetName : "NA"; }
+            set { underlyingAssetName = value; }
+        }
+
+        public OptionType Otype
+        {
+            get { return oType; }
+        }
+
+        /// <summary>
+        /// method which returns the value of an option at maturity 
+        /// given its underlying asset price at maturity
+        /// </summary>
+        /// <param name="finalPrice"> assumes the underlying asset price at maturity</param>
+        /// <returns> A double type value which describes the future value of an option </returns>
+
+        public double ValueAtMaturity(double finalPrice)
+        {
+            if (oType == OptionType.Call)
+            { return Math.Max(0.0, finalPrice - strikePrice); }
+            else { return Math.Max(0.0, strikePrice - finalPrice); }
+        }
+
+        /// <summary>
+        /// This method gives the estimated the option value 
+        /// and the estimation standard error using MC simulation
+        /// </summary>
+        /// <param name="S"> describes the Brownian motion rule of the underlying asset</param>
+        /// <param name="D"> chooses the discretization scheme </param>
+        /// <param name="numberOfScenarios">decides the number of random paths to be generated</param>
+        /// <param name="timeSteps"> decides the number of intervals for discretization scheme </param>
+        /// <param name="antitheticFlag"> chooses whether to use antithetic variance reduction techniques</param>
+        /// <param name="visualizationFlag"> chooses whether to generate 
+        /// the asset price chart for MC simulation</param>
+        /// <param name="form"> defines the window to display the graph</param>
+        /// <returns> a 2 elements array. The first one gives the estimated option price, 
+        /// the second gives the estimation error</returns>
+
+        public abstract double[] PricingByMCSim(StochasticAssetPrice S, IDiscretizationScheme D,
+            int numberOfScenarios, int timeSteps, bool antitheticFlag, bool visualizationFlag, Form1 form = null);
+    }
+
+
+    /// <summary>
+    /// This class describes the Brownian Motion rule for the price of an asset
+    /// </summary>
+
+    public class StochasticAssetPrice
+    {
+        /// <summary>
+        /// <member> mu is the drift parameter</member>
+        /// <member> sigma is the volatility parameter</member>
+        /// <member> currentPrice is the underlying asset spot price</member>
+        /// </summary>
+
+        private double mu;
+        private double sigma;
+        private double currentPrice;
+
+        public double Mu
+        {
+            get { return mu; }
+            set { mu = value; }
+        }
+
+        public double Sigma
+        {
+            get { return sigma; }
+            set { sigma = value; }
+        }
+
+        public double CurrentPrice
+        {
+            get { return currentPrice; }
+            set { currentPrice = value; }
+        }
+
+        /// Constructor
+        public StochasticAssetPrice(double Mu, double sigma, double currentPrice)
+        {
+            this.mu = Mu;
+            this.sigma = sigma;
+            this.currentPrice = currentPrice;
+        }
+
+        /// Copy method
+        public StochasticAssetPrice(StochasticAssetPrice S)
+        {
+            this.Mu = S.Mu;
+            this.sigma = S.Sigma;
+            this.currentPrice = S.CurrentPrice;
+        }
+    }
+
+
+    /// <summary>
+    /// This interface defines the framework for discretization scheme
+    /// </summary>
+
+    public interface IDiscretizationScheme
+    {
+        /// <summary>
+        /// This method simulates a one step motion for the underlying
+        /// asset price based on specified discretization scheme and time interval 
+        /// </summary>
+        /// <param name="S">reference to the current state of underlying asset </param>
+        /// <param name="dt"> decides the time length for each discretized interval</param>
+        /// <param name="Z"> is the random factors for Brownian motion</param>
+        /// <returns> the asset price at the next step </returns>
+
+        double GetNextPrice(StochasticAssetPrice S, double dt, params double[] Z);
+
+        /// <summary>
+        /// This method simulates a whole path for the underlying asset 
+        /// price based on specified discretization scheme and time to maturity 
+        /// </summary>
+        /// <param name="S">reference to the current state of underlying asset </param>
+        /// <param name="nrandom">reference to the Gaussian random variates generator</param>
+        /// <param name="totalTime">defines the time to maturity</param>
+        /// <param name="timeSteps">decides the number of discretized intervals for the whole period</param>
+        /// <param name="visualizationFlag">choose whether to display the price path graph</param>
+        /// <param name="form">defines the window to display the graph</param>
+        /// <returns>an double type array which records the asset price at each point</returns>
+
+        double[] GeneratingRandomPricePath(StochasticAssetPrice S, GaussianGenerator nrandom,
+            double totalTime, int timeSteps, bool visualizationFlag = false, Form1 form = null);
+
+        /// <summary>
+        /// This method simulates two price path using two series of mutual negative 
+        /// random variates named by 'antithetic' which can help reduce the variance 
+        /// of MC simulation
+        /// </summary>
+        /// <returns>an double type 2*N array which records the asset price at each point
+        /// for the two paths
+        /// </returns>
+
+        double[][] DipathByAntitheticMethod(StochasticAssetPrice S, GaussianGenerator nrandom,
+            double totalTime, int timeSteps, bool visualizationFlag = false, Form1 form = null);
+    }
+
+    /// <summary>
+    /// This abstract class implements the IDiscretizationScheme interface
+    /// based on Black Scholes Model (mu and sigma is constant) 
+    /// </summary>
+
+    public abstract class DiscretizationSchemeForBSModel : IDiscretizationScheme
+    {
+
+        public abstract double GetNextPrice(StochasticAssetPrice S, double dt, params double[] Z);
+
+        /// <summary>
+        /// override the <method>GeneratingRandomPricePath</method>.
+        /// For Black Scholes model, mu and sigma is constant, and only one random
+        /// variate is needed to generate the state for next point.
+        /// </summary>
+
+        public double[] GeneratingRandomPricePath(StochasticAssetPrice S, GaussianGenerator nrandom,
+            double totalTime, int timeSteps, bool visualizationFlag = false, Form1 form = null)
+        {
+            double[] pricePath = new double[timeSteps + 1];
+            double dt = totalTime / (double)timeSteps;
+            pricePath[0] = S.CurrentPrice;
+            for (int i = 1; i <= timeSteps; i++)
+            {
+                double z = nrandom.NextGaussian();
+                pricePath[i] = GetNextPrice(S, dt, z);
+            }
+            if (visualizationFlag & form != null)
+            {
+                double[] X = new double[timeSteps + 1];
+                for (int i = 0; i <= timeSteps; i++)
+                {
+                    X[i] = i;
+                }
+                form.add(X, pricePath, "");
+            }
+            return pricePath;
+        }
+
+        /// <summary>
+        /// override the <method>DipathByAntitheticMethod</method>.
+        /// For Black Scholes model, mu and sigma is constant, and only one random
+        /// variate is needed to generate the state for next point
+        /// </summary>
+
+        public double[][] DipathByAntitheticMethod(StochasticAssetPrice S, GaussianGenerator nrandom,
+            double totalTime, int timeSteps, bool visualizationFlag = false, Form1 form = null)
+        {
+            double[][] pricePath = new double[2][];
+            pricePath[0] = new double[timeSteps + 1];
+            pricePath[1] = new double[timeSteps + 1];
+            StochasticAssetPrice S2 = new StochasticAssetPrice(S);
+            double dt = totalTime / (double)timeSteps;
+            pricePath[0][0] = S.CurrentPrice;
+            pricePath[1][0] = S.CurrentPrice;
+            for (int i = 1; i <= timeSteps; i++)
+            {
+                double z = nrandom.NextGaussian();
+                double z2 = -z;
+                pricePath[0][i] = GetNextPrice(S, dt, z);
+                pricePath[1][i] = GetNextPrice(S2, dt, z2);
+            }
+            if (visualizationFlag & form != null)
+            {
+                double[] X = new double[timeSteps + 1];
+                for (int i = 0; i <= timeSteps; i++)
+                {
+                    X[i] = i;
+                }
+                form.add(X, pricePath[0], "");
+                form.add(X, pricePath[1], "");
+            }
+            return pricePath;
+        }
+    }
+
+    /// <summary>
+    /// This class inherites the DiscretizationSchemeForBSModel abstract class
+    /// by specify the calculation method for the next stage asset price
+    /// </summary>
+
+    public class EulerSchemeForBSModel : DiscretizationSchemeForBSModel
+    {
+        /// <summary>
+        /// Override the <method>GetNextPrice</method> based on Euler Scheme
+        /// The StochasticAssetPrice object is updated in this method
+        /// </summary>
+        /// <returns> a double type value for the price of next stage</returns>
+
+        public override double GetNextPrice(StochasticAssetPrice S, double dt, params double[] Z)
+        {
+            double nextPrice = S.CurrentPrice +S.Mu*S.CurrentPrice*dt
+                +S.Sigma*S.CurrentPrice*Z[0] * Math.Sqrt(dt);
+            S.CurrentPrice = nextPrice;
+            return nextPrice;
+        }
+    }
+
+    public class MilsteinSchemeForBSModel : DiscretizationSchemeForBSModel
+    {
+        /// <summary>
+        /// Override the <method>GetNextPrice</method> based on Milstein Scheme
+        /// The StochasticAssetPrice object is updated in this method
+        /// </summary>
+        /// <returns> a double type value for the price of next stage</returns>
+
+        public override double GetNextPrice(StochasticAssetPrice S, double dt, params double[] Z)
+        {
+            double nextPrice = S.CurrentPrice + S.Mu * S.CurrentPrice * dt
+                + S.Sigma * S.CurrentPrice * Z[0] * Math.Sqrt(dt)
+                +0.5*Math.Pow(S.Sigma,2.0)*dt*(Math.Pow(Z[0],2.0)-1);
+            S.CurrentPrice = nextPrice;
+            return nextPrice;
+        }
+    }
+
+
+    public class LogPriceSchemeForBSModel : DiscretizationSchemeForBSModel
+    {
+        /// <summary>
+        /// Override the <method>GetNextPrice</method> based on Discretization Scheme
+        /// for log price and Ito's lemma
+        /// The StochasticAssetPrice object is updated in this method
+        /// </summary>
+        /// <returns> a double type value for the price of next stage</returns>
+
+        public override double GetNextPrice(StochasticAssetPrice S, double dt, params double[] Z)
+        {
+            double nextPrice = S.CurrentPrice * Math.Exp((S.Mu - 0.5 * Math.Pow(S.Sigma,2.0)) * dt
+                + S.Sigma * Z[0] * Math.Sqrt(dt));
+            S.CurrentPrice = nextPrice;
+            return nextPrice;
+        }
+    }
+
+    /// <summary>
+    /// This class inherites PlainVanillaOption class
+    /// The European Option can only be executed at maturity, thus its value does not
+    /// depend on the path before maturity
+    /// </summary>
+
+    public class EuropeanOption : PlainVanillaOption
+    {
+
+        public EuropeanOption(double t, double strikePrice, OptionType oType, string underlyingAssetName = "")
+        {
+            this.t = t;
+            this.oType = oType;
+            this.strikePrice = strikePrice;
+            this.underlyingAssetName = underlyingAssetName;
+        }
+
+        /// <summary>
+        /// override the <method>PricingByMCSim</method>
+        /// In each scenario, a price path is generated and the option value under 
+        /// this scenario is only decided by the final price. So, we take the average 
+        /// for the 'value at maturity' of all the simulated scenarios and 
+        /// discounted as the approximation for the option value. 
+        /// This method also outputs the standard error for the approximation.
+        /// </summary>
+
+        public override double[] PricingByMCSim(StochasticAssetPrice S, IDiscretizationScheme D, int numOfScenarios,
+            int timeSteps, bool antitheticFlag, bool visualizationFlag = false, Form1 form = null)
+        {
+            double[] Result = new double[2];                     //record the approximated price and standard error
+            double[] Sample = new double[numOfScenarios];        //record value at maturity for each scenario
+            double sumValue = 0.0;                               //record cumulated sum of Sample array
+            GaussianGenerator nrand = new GaussianGenerator();
+            if (antitheticFlag)
+            {
+                //when antithetic variance reduction technique is used
+                for (int i = 0; i < numOfScenarios; i++)
+                {
+                    StochasticAssetPrice S1 = new StochasticAssetPrice(S);
+                    double[][] PricePath;
+                    PricePath = D.DipathByAntitheticMethod(S1, nrand, T, timeSteps, visualizationFlag, form);
+                    Sample[i] = (ValueAtMaturity(PricePath[0][timeSteps])
+                        + ValueAtMaturity(PricePath[1][timeSteps])) / 2.0;
+                    sumValue += Sample[i];
+                }
+            }
+            else
+            {
+                //when antithetic variance reduction technique is not used
+                for (int i = 0; i < numOfScenarios; i++)
+                {
+                    StochasticAssetPrice S1 = new StochasticAssetPrice(S);
+                    double[] PricePath;
+                    PricePath = D.GeneratingRandomPricePath(S1, nrand, T, timeSteps, visualizationFlag, form);
+                    Sample[i] = ValueAtMaturity(PricePath[timeSteps]);
+                    sumValue += Sample[i];
+                }
+            }
+            double disFactor = Math.Exp(-S.Mu * T);             //discount factor to convert value at maturity to current
+            Result[0] = sumValue / (double)numOfScenarios * disFactor;
+            double totalVariance = 0.0;
+            for (int i = 0; i < numOfScenarios; i++)
+            {
+                totalVariance += Math.Pow(Sample[i] - Result[0], 2.0);
+            }
+            if (numOfScenarios > 1)
+            {
+                double std = Math.Sqrt(totalVariance / (numOfScenarios - 1));
+                Result[1] = std / Math.Sqrt(numOfScenarios) * disFactor;
+            }
+            return Result;
+        }
+    }
+
+    /// <summary>
+    /// class for graph window
+    /// </summary>
+    public class Form1 : Form
+    {
+        private ZedGraphControl z1;
+
+        public Form1(string S = "")
+        {
+            InitializeComponent(S);
+        }
+
+        private void InitializeComponent(string S)
+        {
+            z1 = new ZedGraphControl();
+            // set zedGraphControl
+            z1.Location = new System.Drawing.Point(0, 0);
+            z1.Size = new System.Drawing.Size(800, 500);
+            // set Form
+            AutoScaleBaseSize = new System.Drawing.Size(5, 13);
+            ClientSize = new System.Drawing.Size(800, 500);
+            Controls.Add(z1);
+            z1.GraphPane.Title = S;
+        }
+
+        public void add(double[] x, double[] y, string s)
+        {
+            z1.GraphPane.AddCurve(s, x, y, Color.Red, SymbolType.Square);
+        }
+
+        public Form1 Display()
+        {
+            z1.AxisChange();
+            z1.Invalidate();
+            return this;
+        }
+    }
+
+    /// <summary>
+    /// testing program
+    /// </summary>
+
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            //input needed information from keyboard
+            Console.WriteLine("Input spot price of underlying asset:");
+            double spotPrice = Convert.ToDouble(Console.ReadLine());
+            while (spotPrice<0)
+            {
+                Console.WriteLine("price must be positive, re-enter valide price:");
+                spotPrice = Convert.ToDouble(Console.ReadLine());
+            }
+            int oType;
+            do
+            {
+                Console.WriteLine("Input European option type (0 for call, 1 for put):");
+                oType = Convert.ToInt32(Console.ReadLine());
+            }
+            while (oType != 0 & oType != 1);
+            OptionType optionType = (oType == 0 ? OptionType.Call : OptionType.Put);
+            Console.WriteLine("Input option strike price:");
+            double strikePrice = Convert.ToDouble(Console.ReadLine());
+            Console.WriteLine("Input time to maturity of this option:");
+            double timeToMaturity = Convert.ToDouble(Console.ReadLine());
+            while (timeToMaturity < 0)
+            {
+                Console.WriteLine("time to maturity must be non-negative, re-enter valide value:");
+                timeToMaturity = Convert.ToDouble(Console.ReadLine());
+            }
+            Console.WriteLine("Input drift parameter for brownian motion:");
+            double Mu = Convert.ToDouble(Console.ReadLine());
+            Console.WriteLine("Input volatility parameter for brownian motion:");
+            double sigma = Convert.ToDouble(Console.ReadLine());
+            while (sigma < 0)
+            {
+                Console.WriteLine("volatility parameter must be non-negative, re-enter valide value:");
+                sigma = Convert.ToDouble(Console.ReadLine());
+            }
+            Console.WriteLine("Input number of scenarios generated by MC simulation:");
+            int numOfScenarios = Convert.ToInt32(Console.ReadLine());
+            while (numOfScenarios < 1)
+            {
+                Console.WriteLine("this number must be positive, re-enter valide value:");
+                numOfScenarios = Convert.ToInt32(Console.ReadLine());
+            }
+            Console.WriteLine("Input number of time steps for discretization:");
+            int timeSteps = Convert.ToInt32(Console.ReadLine());
+            while (timeSteps < 1)
+            {
+                Console.WriteLine("this number must be positive, re-enter valide value:");
+                timeSteps = Convert.ToInt32(Console.ReadLine());
+            }
+            Console.WriteLine("Input whether to use antithetic variance reduction technique " +
+                "(true for yes,false for no): ");
+            bool antithetic = Convert.ToBoolean(Console.ReadLine());
+            Console.WriteLine("Input whether to visualize price path (true for yes,false for no): ");
+            bool visualizationFlag = Convert.ToBoolean(Console.ReadLine());
+            int discretizationScheme;
+            do
+            {
+                Console.WriteLine("Input discretization scheme (0 for Euler, 1 for Milstein, 2 for log price scheme):");
+                discretizationScheme = Convert.ToInt32(Console.ReadLine());
+            }
+            while (discretizationScheme < 0 | discretizationScheme > 2);
+            EuropeanOption Option = new EuropeanOption(timeToMaturity, strikePrice, optionType);
+            IDiscretizationScheme scheme;
+            if (discretizationScheme == 0)
+            { scheme = (IDiscretizationScheme)(new EulerSchemeForBSModel()); } 
+            else if (discretizationScheme==1)
+            { scheme = (IDiscretizationScheme)(new MilsteinSchemeForBSModel()); }
+            else
+            {scheme= (IDiscretizationScheme)(new LogPriceSchemeForBSModel()); }              
+            StochasticAssetPrice Asset = new StochasticAssetPrice(Mu, sigma, spotPrice);
+
+            if (antithetic)
+            {
+                Form1 s1form = new Form1("MC Simulation with Antithetic Variance Reduction");
+                double[] s1 = Option.PricingByMCSim(Asset, scheme, numOfScenarios, timeSteps,
+                    true, visualizationFlag, s1form);
+                Console.WriteLine("Option price estimated by Monte Carlo Simulation and " +
+                    "antithetic variance reduction is:\n {0:#0.00} \n Standard error is:\n {1:#0.000} ",
+                    s1[0], s1[1]);
+                if (visualizationFlag)
+                {
+                    // display the graph
+                    Application.Run(s1form.Display());
+                }
+            }
+            else
+            {
+                Form1 s2form = new Form1("MC Simulation without Antithetic Variance Reduction");
+                double[] s2 = Option.PricingByMCSim(Asset, scheme, numOfScenarios, timeSteps, false,
+                    visualizationFlag, s2form);
+                Console.WriteLine("Option price estimated by Monte Carlo Simulation is:\n {0:#0.00} \n" +
+                    "Standard error is:\n {1:#0.000} ", s2[0], s2[1]);
+                if (visualizationFlag)
+                {
+                    // display the graph
+                    Application.Run(s2form.Display());
+                }
+            }
+            Console.ReadLine();
+        }
+    }
+}

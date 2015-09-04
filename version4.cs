@@ -571,7 +571,7 @@ namespace OptionPricing
             { scheme = (IDiscretizationScheme)(new LogPriceSchemeForBSModel()); }
             StochasticAssetPrice Asset = new StochasticAssetPrice(Mu, sigma, spotPrice);
 
-            Form1 s1form = new Form1("MC Simulation with Antithetic Variance Reduction");
+            Form1 s1form = new Form1("MC Simulation");
             double[] s1 = Option.PricingByMCSim(Asset, scheme, numOfScenarios, timeSteps,
                 antithetic, visualizationFlag, s1form);
             if (antithetic)
